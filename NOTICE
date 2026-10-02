@@ -1,0 +1,12 @@
+Dot Companion for Android & Wear OS
+Copyright 2026 Dot Companion contributors
+
+Original project code is licensed under Apache License 2.0.
+
+This is an unofficial community project. OpenAI, ChatGPT, Android, Wear OS,
+Google, and related marks belong to their respective owners. Their mention
+describes interoperability targets and does not imply endorsement.
+
+The Gradle wrapper scripts and JAR originate from Gradle 8.11.1 and retain
+their upstream Apache-2.0 license. Other dependencies are not relicensed by
+this project. See docs/THIRD_PARTY_NOTICES.md.

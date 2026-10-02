@@ -1,0 +1,14 @@
+{
+  "name": "dot-companion-local-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "test": "node --test test/*.test.mjs",
+    "e2e": "node scripts/synthetic-e2e.mjs",
+    "demo": "node scripts/synthetic-e2e.mjs"
+  }
+}

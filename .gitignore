@@ -1,0 +1,16 @@
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+node_modules/
+.local-dev*/
+*.private.json
+bridge/.data/
+bridge/.runtime/
+.DS_Store
