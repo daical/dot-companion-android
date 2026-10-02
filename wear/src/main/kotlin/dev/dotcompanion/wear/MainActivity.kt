@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.wear.compose.foundation.lazy.AutoCenteringParams
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Chip
@@ -98,6 +99,7 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) }) {
         ScalingLazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("watch_list"),
             contentPadding = PaddingValues(horizontal = 26.dp, vertical = 28.dp),
+            autoCentering = AutoCenteringParams(itemIndex = 0),
             verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (deleting) {
                 item { Text("Delete local history?", textAlign = TextAlign.Center, style = MaterialTheme.typography.title3) }
@@ -126,10 +128,21 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
                 ui.issue?.let { error -> item { Text(error, style = MaterialTheme.typography.caption1, color = Color(0xFFFFB5B5), textAlign = TextAlign.Center) } }
                 item { Chip(onClick = { writing = false }, label = { Text("Back") }, modifier = Modifier.fillMaxWidth()) }
             } else {
-                item { CompanionVisual(Modifier.size(90.dp), ui.saved.state.messages.lastOrNull()?.status, animateCompanion) }
-                item { Text("Dot Companion", style = MaterialTheme.typography.title3, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold) }
-                item { Text(ui.connectionLabel, color = CompanionViolet, style = MaterialTheme.typography.caption1, textAlign = TextAlign.Center, modifier = Modifier.testTag("watch_connection_status")) }
-                item { Text("Live dot: unavailable", style = MaterialTheme.typography.caption2, textAlign = TextAlign.Center, modifier = Modifier.testTag("watch_live_status")) }
+                item {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        CompanionVisual(Modifier.size(40.dp), ui.saved.state.messages.lastOrNull()?.status, animateCompanion)
+                        Text("Dot Companion", fontSize = 13.sp, lineHeight = 16.sp,
+                            textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                        Text(ui.connectionLabel, color = CompanionViolet, fontSize = 12.sp, lineHeight = 14.sp,
+                            textAlign = TextAlign.Center, modifier = Modifier.testTag("watch_connection_status"))
+                        Text("Live dot: unavailable", fontSize = 12.sp, lineHeight = 14.sp,
+                            textAlign = TextAlign.Center, modifier = Modifier.testTag("watch_live_status"))
+                    }
+                }
+                item { Chip(onClick = { writing = true }, label = { Text("Write text") },
+                    secondaryLabel = { Text(if (ui.saved.state.mode == ConnectionMode.LOCAL_PREVIEW) "Synthetic replies only" else "Saved before delivery") },
+                    modifier = Modifier.fillMaxWidth().testTag("watch_write_text")) }
                 if (ui.saved.state.mode == ConnectionMode.LOCAL_PREVIEW) {
                     item { Chip(onClick = { onSend("Show me the synthetic watch preview.") }, label = { Text("Try a fixture") },
                         secondaryLabel = { Text("Synthetic · on this watch") }, enabled = ui.saved.state.messages.size < CompanionQueue.MAX_MESSAGES,
@@ -137,9 +150,6 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
                     item { Chip(onClick = { onMode(ConnectionMode.LOCAL_BRIDGE) }, label = { Text("Use phone link") },
                         secondaryLabel = { Text("Dot connection unverified") }, modifier = Modifier.fillMaxWidth().testTag("watch_phone_link")) }
                 }
-                item { Chip(onClick = { writing = true }, label = { Text("Write text") },
-                    secondaryLabel = { Text(if (ui.saved.state.mode == ConnectionMode.LOCAL_PREVIEW) "Synthetic replies only" else "Saved before delivery") },
-                    modifier = Modifier.fillMaxWidth().testTag("watch_write_text")) }
                 ui.issue?.let { error -> item { Text(error, style = MaterialTheme.typography.caption1, color = Color(0xFFFFB5B5), textAlign = TextAlign.Center) } }
                 ui.saved.state.messages.reversed().forEach { message ->
                     item(key = message.requestId) {
