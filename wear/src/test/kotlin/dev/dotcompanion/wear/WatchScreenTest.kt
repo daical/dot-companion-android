@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollAction
@@ -87,6 +88,7 @@ class WatchScreenTest {
         rule.setContent { WatchScreen(WatchUiState(PersistentSnapshot()), { sent += it }, {}, {}, {}, false) }
         assertInsideRoundScreen("watch_connection_status")
         assertInsideRoundScreen("watch_live_status")
+        rule.onNodeWithTag("watch_time").assertIsDisplayed()
         rule.onNodeWithTag("watch_live_status").assertTextContains("unavailable", substring = true)
         screenshot("watch-round-preview")
         scrollTo(hasTestTag("watch_synthetic_fixture"))
@@ -99,6 +101,7 @@ class WatchScreenTest {
         rule.setContent { WatchScreen(value.value, {}, {}, {}, {}, false) }
         scrollTo(hasText("Saved on phone · no reply yet"))
         rule.onNodeWithText("Saved on phone · no reply yet").assertIsDisplayed()
+        rule.onNodeWithTag("watch_time").assertIsNotDisplayed()
         screenshot("watch-round-receipt")
         rule.runOnIdle { value.value = value.value.copy(saved = value.value.saved.copy(phoneAcknowledgedIds = emptySet())) }
         scrollTo(hasText("Phone reports waiting · receipt unconfirmed"))

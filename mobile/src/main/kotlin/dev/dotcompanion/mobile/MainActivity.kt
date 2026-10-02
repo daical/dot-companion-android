@@ -63,6 +63,7 @@ import dev.dotcompanion.shared.CompanionNight
 import dev.dotcompanion.shared.CompanionViolet
 import dev.dotcompanion.shared.CompanionVisual
 import dev.dotcompanion.shared.displayLabel
+import dev.dotcompanion.shared.rememberPackagedLicenses
 
 class MainActivity : ComponentActivity() {
     private val repository get() = (application as CompanionApplication).repository
@@ -100,6 +101,7 @@ fun PhoneScreen(
 ) = PhoneTheme {
     val state = ui.saved.state
     var settings by remember { mutableStateOf(false) }
+    var licenses by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var submittedDraft by remember { mutableStateOf<String?>(null) }
     var previousIds by remember { mutableStateOf(emptySet<String>()) }
@@ -112,7 +114,10 @@ fun PhoneScreen(
         } else if (ui.issue != null) submittedDraft = null
     }
     Surface(modifier = Modifier.fillMaxSize().testTag("phone_screen"), color = CompanionNight) {
-        Column(Modifier.safeDrawingPadding().imePadding().padding(horizontal = 20.dp)) {
+        if (licenses) {
+            val notices by rememberPackagedLicenses()
+            PhoneLicenseScreen(notices, onBack = { licenses = false; settings = true })
+        } else Column(Modifier.safeDrawingPadding().imePadding().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Dot Companion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -166,7 +171,8 @@ fun PhoneScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
         }
     }
-    if (settings) ConnectionDialog(ui, showDebugControls, onMode, onConnect, onDeleteHistory, onDismiss = { settings = false })
+    if (settings) ConnectionDialog(ui, showDebugControls, onMode, onConnect, onDeleteHistory,
+        onLicenses = { settings = false; licenses = true }, onDismiss = { settings = false })
 }
 
 @Composable
@@ -199,7 +205,7 @@ private fun MessageCard(message: CompanionMessage, syntheticRequest: Boolean, on
 
 @Composable
 private fun ConnectionDialog(ui: PhoneUiState, debug: Boolean, onMode: (ConnectionMode) -> Unit,
-    onConnect: (String, String) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    onConnect: (String, String) -> Unit, onDelete: () -> Unit, onLicenses: () -> Unit, onDismiss: () -> Unit) {
     var endpoint by remember { mutableStateOf("http://10.0.2.2:8787") }
     // Deliberately not rememberSaveable, preferences or any persistent state.
     var token by remember { mutableStateOf("") }
@@ -208,6 +214,7 @@ private fun ConnectionDialog(ui: PhoneUiState, debug: Boolean, onMode: (Connecti
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Live dot connection: unavailable", fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("settings_live_status"))
             Text("This app cannot access existing ChatGPT conversations or native dot calls. Local bridge replies remain unverified.")
+            OutlinedButton(onClick = onLicenses, modifier = Modifier.fillMaxWidth().testTag("phone_licenses")) { Text("Licenses") }
             OutlinedButton(onClick = { onMode(ConnectionMode.LOCAL_PREVIEW) }, modifier = Modifier.fillMaxWidth().testTag("mode_preview")) { Text("Use local synthetic preview") }
             OutlinedButton(onClick = { onMode(ConnectionMode.DISCONNECTED) }, modifier = Modifier.fillMaxWidth().testTag("mode_disconnected")) { Text("Disconnect · keep messages") }
             if (debug) {

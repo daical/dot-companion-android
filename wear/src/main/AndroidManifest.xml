@@ -11,7 +11,7 @@
         android:theme="@style/Theme.DotCompanion"
         android:usesCleartextTraffic="false">
         <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true" android:taskAffinity="dev.dotcompanion.app.wear">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

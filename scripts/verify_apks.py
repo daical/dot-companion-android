@@ -6,6 +6,9 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from zipfile import ZipFile
+
+from generate_notices import strict_json
 
 root = Path(__file__).resolve().parents[1]
 tools = Path(sys.argv[1])
@@ -28,12 +31,35 @@ for module in ("mobile", "wear"):
     package = re.search(r"^package: name='([^']+)'", badging, re.MULTILINE)
     if len(digests) != 1 or package is None or package.group(1) != "dev.dotcompanion.app":
         raise SystemExit(f"Unexpected signing or package identity in {module} developer APK")
+    with ZipFile(apk) as archive:
+        notice_bytes = archive.read("assets/licenses/notices.json")
+    notice_asset = strict_json(notice_bytes.decode("utf-8", errors="strict"))
+    coverage = strict_json((root / module / "build/reports/licenses/debug/coverage.json").read_text(encoding="utf-8"))
+    entries = notice_asset["entries"]
+    if (notice_asset["schemaVersion"] != 1 or len(entries) != coverage["entryCount"]
+            or hashlib.sha256(notice_bytes).hexdigest() != coverage["assetSha256"]):
+        raise SystemExit(f"APK notices differ from this build's coverage in {module}")
+    entry_ids = {entry["id"] for entry in entries}
+    if len(entry_ids) != len(entries) or any(hashlib.sha256(entry["text"].encode("utf-8")).hexdigest() != entry["id"] for entry in entries):
+        raise SystemExit(f"Invalid APK notice identity in {module}")
+    for filename in ("LICENSE", "NOTICE", "docs/THIRD_PARTY_NOTICES.md"):
+        expected = (root / filename).read_bytes().decode("utf-8", errors="strict")
+        if not any(entry["text"] == expected for entry in entries):
+            raise SystemExit(f"APK missing complete project notice {filename} in {module}")
+    for artifact in coverage["artifacts"]:
+        if not set(artifact["archiveNoticeIds"]).issubset(entry_ids):
+            raise SystemExit(f"APK missing upstream archive notices in {module}")
+        if not any(entry["title"] == artifact["coordinate"] for entry in entries):
+            raise SystemExit(f"APK missing runtime dependency attribution in {module}")
     results[module] = {
         "package": package.group(1),
         "signerCertificateSha256": digests[0].lower(),
         "apkSha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
+        "noticeAssetSha256": coverage["assetSha256"],
+        "noticeEntryCount": len(entries),
+        "runtimeArtifactCount": len(coverage["artifacts"]),
     }
 if results["mobile"]["signerCertificateSha256"] != results["wear"]["signerCertificateSha256"]:
     raise SystemExit("Phone and watch developer APKs have different signing certificates")
 (reports / "verified.json").write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
-print("Phone/watch APK signatures verified; application ID and signing certificate match.")
+print("Phone/watch APK signatures and complete bundled notices verified; application ID and signing certificate match.")

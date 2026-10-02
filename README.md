@@ -33,7 +33,7 @@ The demo uses a synthetic subscriber and reply tool. It does not contact ChatGPT
 
 ## Build the native apps
 
-Use an Android environment whose SDK terms you have already accepted: JDK 17, Android SDK platform 35 and Build Tools 35.0.0. The Gradle 8.11.1 wrapper JAR is checksum verified and its distribution checksum is pinned. Build scripts do not accept SDK licenses or automatically install SDK packages.
+Use an Android environment whose SDK terms you have already accepted: JDK 17, Python 3.9 or later, Android SDK platform 35 and Build Tools 35.0.0. Python generates offline notices from the resolved runtime graph. The Gradle 8.11.1 wrapper JAR is checksum verified and its distribution checksum is pinned. Build scripts do not accept SDK licenses or automatically install SDK packages.
 
 ```sh
 ./gradlew :core:test :mobile:assembleDebug :wear:assembleDebug \

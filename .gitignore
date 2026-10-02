@@ -14,3 +14,5 @@ node_modules/
 bridge/.data/
 bridge/.runtime/
 .DS_Store
+__pycache__/
+*.pyc

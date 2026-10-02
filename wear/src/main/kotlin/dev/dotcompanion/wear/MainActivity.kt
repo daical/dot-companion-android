@@ -48,6 +48,7 @@ import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.scrollAway
 import dev.dotcompanion.core.CompanionQueue
 import dev.dotcompanion.core.ConnectionMode
 import dev.dotcompanion.core.FailureKind
@@ -57,6 +58,7 @@ import dev.dotcompanion.shared.CompanionCoral
 import dev.dotcompanion.shared.CompanionNight
 import dev.dotcompanion.shared.CompanionViolet
 import dev.dotcompanion.shared.CompanionVisual
+import dev.dotcompanion.shared.rememberPackagedLicenses
 
 class MainActivity : ComponentActivity() {
     private val repository get() = (application as WatchApplication).repository
@@ -82,6 +84,7 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
     onRetry: (String) -> Unit, onDeleteHistory: () -> Unit, animateCompanion: Boolean = true) = WatchTheme {
     var writing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var licenses by remember { mutableStateOf(false) }
     var draft by rememberSaveable { mutableStateOf("") }
     var submittedDraft by remember { mutableStateOf<String?>(null) }
     var previousIds by remember { mutableStateOf(emptySet<String>()) }
@@ -95,7 +98,11 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
     }
     val listState = rememberScalingLazyListState(initialCenterItemIndex = 0)
     val screenShape = if (LocalConfiguration.current.isScreenRound) Modifier.clip(CircleShape) else Modifier
-    Scaffold(modifier = Modifier.fillMaxSize().then(screenShape).background(CompanionNight).testTag("watch_screen"), timeText = { TimeText() },
+    if (licenses) {
+        val notices by rememberPackagedLicenses()
+        WatchLicenseScreen(notices, onBack = { licenses = false })
+    } else Scaffold(modifier = Modifier.fillMaxSize().then(screenShape).background(CompanionNight).testTag("watch_screen"),
+        timeText = { TimeText(modifier = Modifier.testTag("watch_time").scrollAway(listState, itemIndex = 0)) },
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) }) {
         ScalingLazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("watch_list"),
             contentPadding = PaddingValues(horizontal = 26.dp, vertical = 28.dp),
@@ -188,6 +195,7 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
                 }
                 item { Chip(onClick = { onMode(ConnectionMode.DISCONNECTED) }, label = { Text("Disconnect") }, modifier = Modifier.fillMaxWidth()) }
                 item { Chip(onClick = { deleting = true }, label = { Text("Delete watch history") }, modifier = Modifier.fillMaxWidth()) }
+                item { Chip(onClick = { licenses = true }, label = { Text("Licenses") }, modifier = Modifier.fillMaxWidth().testTag("watch_licenses")) }
                 item { Text("Unofficial community project", style = MaterialTheme.typography.caption2, textAlign = TextAlign.Center) }
             }
         }
