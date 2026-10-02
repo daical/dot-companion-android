@@ -94,19 +94,19 @@ def generate(catalog, source_root):
         add(title, (Path(source_root) / filename).read_bytes().decode("utf-8", errors="strict"))
     if not isinstance(catalog, list) or not catalog:
         raise ValueError("Runtime artifact catalog is empty")
-    seen_coordinates = set()
-    for component in sorted(catalog, key=lambda item: item["coordinate"]):
+    descriptions = {}
+    for component in sorted(catalog, key=lambda item: (item["coordinate"], Path(item["archive"]).name)):
         coordinate = component["coordinate"]
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+", coordinate) or coordinate in seen_coordinates:
-            raise ValueError("Invalid or repeated runtime coordinate")
-        seen_coordinates.add(coordinate)
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+", coordinate):
+            raise ValueError(f"Invalid runtime coordinate: {coordinate}")
         data = Path(component["archive"]).read_bytes()
+        archive_hash = hashlib.sha256(data).hexdigest()
         notices = archive_notices(data)
         licenses = pom_licenses(component["pom"])
         if not licenses and not notices:
             raise ValueError(f"Unresolved license coverage: {coordinate}")
         notice_ids = [add(title, text) for title, text in notices]
-        description = f"Runtime artifact: {coordinate}\n\n"
+        description = f"Runtime artifact: {coordinate}\nArchive: {Path(component['archive']).name}\nArchive SHA-256: {archive_hash}\n\n"
         for license_info in licenses:
             description += f"Declared license: {license_info['name']}\nLicense URL: {license_info['url']}\n\n"
         if not licenses:
@@ -115,9 +115,13 @@ def generate(catalog, source_root):
             description += f"Bundled upstream notice: {title}\nNotice ID: {notice_id}\n\n"
         if not notices:
             description += "This archive contains no separate notice text. Its declared license metadata is retained; the bundled project Apache text does not relicense dependencies.\n"
-        add(coordinate, description)
-        coverage.append({"coordinate": coordinate, "archiveSha256": hashlib.sha256(data).hexdigest(),
+        descriptions.setdefault(coordinate, []).append(description)
+        coverage.append({"coordinate": coordinate, "archive": Path(component["archive"]).name, "archiveSha256": archive_hash,
                          "declaredLicenses": licenses, "archiveNoticeIds": notice_ids})
+    # A Maven component can publish several runtime artifacts/classifiers. Keep
+    # every archive and notice in its one dependency attribution entry.
+    for coordinate, descriptions_for_coordinate in descriptions.items():
+        add(coordinate, "\n".join(descriptions_for_coordinate))
     result = {"schemaVersion": 1, "entries": sorted(entries.values(), key=lambda entry: (entry["title"].casefold(), entry["id"]))}
     encoded = (json.dumps(result, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     if len(entries) > MAX_ENTRIES or len(encoded) > MAX_ASSET:

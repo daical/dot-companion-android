@@ -81,6 +81,22 @@ class NoticeGenerationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unresolved license coverage: test:unknown:1.0"):
             generate(catalog, self.root)
 
+    def test_multiple_runtime_archives_for_one_component_keep_all_notices(self):
+        first = self.component("test:classifier:1.0", zipped({"NOTICE": b"First archive copyright\n"}))
+        second_archive = self.root / "classifier-secondary.jar"
+        second_archive.write_bytes(zipped({"NOTICE": b"Second archive copyright\n"}))
+        second = {**first, "archive": str(second_archive)}
+        encoded, report = generate([first, second], self.root)
+        entries = json.loads(encoded)["entries"]
+        self.assertEqual(1, sum(e["title"] == "test:classifier:1.0" for e in entries))
+        self.assertTrue(any(e["text"] == "First archive copyright\n" for e in entries))
+        self.assertTrue(any(e["text"] == "Second archive copyright\n" for e in entries))
+        metadata = next(e["text"] for e in entries if e["title"] == "test:classifier:1.0")
+        self.assertIn("classifier.aar", metadata)
+        self.assertIn("classifier-secondary.jar", metadata)
+        self.assertEqual(2, len(report["artifacts"]))
+        self.assertNotEqual(report["artifacts"][0]["archiveNoticeIds"], report["artifacts"][1]["archiveNoticeIds"])
+
     def test_pom_metadata_does_not_replace_google_full_text(self):
         text = b"Full original copyright and permission notice\n"
         catalog = [self.component("test:google-fixture:1.0", zipped({
