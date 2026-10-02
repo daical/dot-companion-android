@@ -13,7 +13,6 @@ import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 import org.gradle.process.ExecOperations
 import javax.inject.Inject
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 
@@ -99,8 +98,10 @@ abstract class GenerateNoticeAssets @Inject constructor(private val execOperatio
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
             setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+            // Use the JAXP property URIs directly: Gradle's compile classpath can
+            // contain an older xml-apis XMLConstants without these Java 7 fields.
+            setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "")
+            setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "")
         }
         return factory.newDocumentBuilder().parse(file).documentElement
     }
