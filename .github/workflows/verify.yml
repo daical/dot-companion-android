@@ -52,6 +52,8 @@ jobs:
           mkdir -p build/reports/dependencies
           ./gradlew --no-daemon --max-workers=2 :mobile:dependencies --configuration debugRuntimeClasspath > build/reports/dependencies/mobile.txt
           ./gradlew --no-daemon --max-workers=2 :wear:dependencies --configuration debugRuntimeClasspath > build/reports/dependencies/wear.txt
+      - name: Verify developer APK signatures and paired identity
+        run: python3 scripts/verify_apks.py "$ANDROID_HOME/build-tools/35.0.0"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -65,3 +67,4 @@ jobs:
             **/build/reports/lint-results-debug.*
             **/build/outputs/screenshots/**
             build/reports/dependencies/**
+            build/reports/apks/**

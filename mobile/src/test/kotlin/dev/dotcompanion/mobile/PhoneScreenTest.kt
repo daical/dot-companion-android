@@ -2,12 +2,13 @@ package dev.dotcompanion.mobile
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -40,10 +41,27 @@ class PhoneScreenTest {
     private val message = CompanionMessage("9f13e909-fb28-479a-9b99-de401517eaa1", CompanionQueue.CONVERSATION_ID,
         "This is a local fixture request.", "2026-01-01T00:00:00Z")
     private fun screenshot(name: String) {
-        val bitmap = rule.onNodeWithTag("phone_screen").captureToImage().asAndroidBitmap()
-        val target = File("build/outputs/screenshots/$name.png").apply { parentFile.mkdirs() }
+        // Compose's window capture waits for a redraw callback unavailable in Robolectric.
+        // Draw the actual laid-out Android content view with native graphics instead.
+        val bitmap = rule.runOnIdle {
+            val content = rule.activity.findViewById<View>(android.R.id.content)
+            assertTrue("Native content must be laid out", content.width > 0 && content.height > 0)
+            Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888).also {
+                content.draw(Canvas(it))
+            }
+        }
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val colors = HashSet<Int>()
+        for (pixel in pixels) {
+            if (Color.alpha(pixel) > 0) colors += pixel
+            if (colors.size >= 8) break
+        }
+        assertTrue("Native capture must contain rendered UI, not a blank bitmap", colors.size >= 8)
+        val target = File("build/outputs/screenshots/$name.png")
+        val directory = requireNotNull(target.parentFile)
+        assertTrue("Screenshot directory must exist", directory.isDirectory || directory.mkdirs())
         target.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-        assertTrue(bitmap.width > 0 && bitmap.height > 0)
     }
     @Test fun syntheticFixtureControlAndNativePreviewAreExplicit() {
         val sends = mutableListOf<String>()
@@ -61,7 +79,7 @@ class PhoneScreenTest {
         rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Synthetic fixture · generated on device"))
         rule.onNodeWithText("Synthetic fixture · generated on device").assertIsDisplayed()
         rule.onNodeWithTag("connection_settings").performClick()
-        rule.onNodeWithTag("settings_live_status").assertTextContains("unavailable")
+        rule.onNodeWithTag("settings_live_status").assertTextContains("unavailable", substring = true)
         rule.onNodeWithTag("mode_disconnected").performClick()
         rule.onNodeWithText("Done").performClick()
         rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Synthetic fixture · generated on device"))
