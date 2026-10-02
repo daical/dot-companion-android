@@ -8,16 +8,19 @@ This foundation includes a native local preview and a synthetic MCP Events text 
 
 | Capability | Status |
 | --- | --- |
-| Phone text UI and original animated companion | Native implementation; CI verification recorded in release notes |
-| Round Wear OS interface | Native implementation; device validation pending |
+| Phone text UI and original animated companion | Build and hosted native UI tests passed; devices pending |
+| Round Wear OS interface | Build and 192 dp round-screen render tests passed; devices pending |
 | Durable local queue, retries, and delivery states | Implemented with shared state tests |
 | Phone/watch Data Layer transport | Implemented; actual paired devices not tested |
-| Local authenticated request → event → read tool → reply tool | Synthetic harness, tested locally |
+| Local authenticated request → event → read tool → reply tool | Synthetic harness, tested locally and in CI |
+| Offline dependency notices | Bundled from the resolved runtime graph; native readers tested |
 | Real dot messaging via an installed plugin | Not configured or validated |
 | Microphone, speech streaming, and notifications | Not enabled; no permission prompts |
 | Public server, production OAuth, or Play Store release | Not deployed |
 
 Preview replies always say **synthetic**. A local HTTP connection does not count as a dot connection. Queue receipt, webhook receipt, and a reply are distinct states.
+
+See the [test-rendered phone/watch screens](docs/SCREENSHOTS.md) and [verification record](docs/VERIFICATION.md). For paired developer APKs and exact tagged-build evidence, see the [releases page](https://github.com/daical/dot-companion-android/releases).
 
 ## Run the local bridge milestone
 
