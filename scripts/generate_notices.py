@@ -103,12 +103,23 @@ def generate(catalog, source_root):
         archive_hash = hashlib.sha256(data).hexdigest()
         notices = archive_notices(data)
         licenses = pom_licenses(component["pom"])
+        license_source = coordinate if licenses else None
+        for parent in component.get("parentPoms", []):
+            if licenses:
+                break
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+", parent["coordinate"]):
+                raise ValueError("Invalid license parent coordinate")
+            licenses = pom_licenses(parent["pom"])
+            if licenses:
+                license_source = parent["coordinate"]
         if not licenses and not notices:
             raise ValueError(f"Unresolved license coverage: {coordinate}")
         notice_ids = [add(title, text) for title, text in notices]
         description = f"Runtime artifact: {coordinate}\nArchive: {Path(component['archive']).name}\nArchive SHA-256: {archive_hash}\n\n"
         for license_info in licenses:
             description += f"Declared license: {license_info['name']}\nLicense URL: {license_info['url']}\n\n"
+        if licenses and license_source != coordinate:
+            description += f"License declaration inherited from POM: {license_source}\n\n"
         if not licenses:
             description += "No license declared in POM metadata; complete archive notices are bundled below.\n\n"
         for (title, _), notice_id in zip(notices, notice_ids):
@@ -117,7 +128,7 @@ def generate(catalog, source_root):
             description += "This archive contains no separate notice text. Its declared license metadata is retained; the bundled project Apache text does not relicense dependencies.\n"
         descriptions.setdefault(coordinate, []).append(description)
         coverage.append({"coordinate": coordinate, "archive": Path(component["archive"]).name, "archiveSha256": archive_hash,
-                         "declaredLicenses": licenses, "archiveNoticeIds": notice_ids})
+                         "declaredLicenses": licenses, "licenseSourceCoordinate": license_source, "archiveNoticeIds": notice_ids})
     # A Maven component can publish several runtime artifacts/classifiers. Keep
     # every archive and notice in its one dependency attribution entry.
     for coordinate, descriptions_for_coordinate in descriptions.items():

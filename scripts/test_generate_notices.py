@@ -97,6 +97,24 @@ class NoticeGenerationTest(unittest.TestCase):
         self.assertEqual(2, len(report["artifacts"]))
         self.assertNotEqual(report["artifacts"][0]["archiveNoticeIds"], report["artifacts"][1]["archiveNoticeIds"])
 
+    def test_license_inheritance_retains_nearest_declaring_parent_provenance(self):
+        child = self.component("test:child:1.0", zipped({"classes.txt": b"Runtime code fixture"}), declared=False)
+        empty_parent = self.component("test:empty-parent:1.0", zipped({}), declared=False)
+        parent = self.component("test:declaring-parent:1.0", zipped({}))
+        child["parentPoms"] = [{"coordinate": item["coordinate"], "pom": item["pom"]} for item in (empty_parent, parent)]
+        encoded, report = generate([child], self.root)
+        self.assertEqual("test:declaring-parent:1.0", report["artifacts"][0]["licenseSourceCoordinate"])
+        self.assertEqual("Fixture license", report["artifacts"][0]["declaredLicenses"][0]["name"])
+        metadata = next(e["text"] for e in json.loads(encoded)["entries"] if e["title"] == "test:child:1.0")
+        self.assertIn("License declaration inherited from POM: test:declaring-parent:1.0", metadata)
+
+    def test_child_license_declaration_takes_precedence_over_parent(self):
+        child = self.component("test:child:1.0", zipped({}))
+        parent = self.component("test:parent:1.0", zipped({}), declared=False)
+        child["parentPoms"] = [{"coordinate": parent["coordinate"], "pom": parent["pom"]}]
+        _, report = generate([child], self.root)
+        self.assertEqual("test:child:1.0", report["artifacts"][0]["licenseSourceCoordinate"])
+
     def test_pom_metadata_does_not_replace_google_full_text(self):
         text = b"Full original copyright and permission notice\n"
         catalog = [self.component("test:google-fixture:1.0", zipped({

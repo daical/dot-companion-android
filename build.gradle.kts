@@ -13,6 +13,9 @@ import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 import org.gradle.process.ExecOperations
 import javax.inject.Inject
+import javax.xml.XMLConstants
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 plugins {
     id("com.android.application") version "8.9.2" apply false
@@ -46,11 +49,40 @@ abstract class GenerateNoticeAssets @Inject constructor(private val execOperatio
                     ?: error("Missing runtime POM for ${component.id.displayName}")
                 component.id to pom.file
             }
+        val parentCache = mutableMapOf<String, java.io.File>()
+        fun parentPoms(initialFile: java.io.File, initialCoordinate: String): List<Map<String, String>> {
+            val parents = mutableListOf<Map<String, String>>()
+            val seen = mutableSetOf(initialCoordinate)
+            var current = initialFile
+            while (true) {
+                val pom = readPom(current)
+                if (childElement(pom, "licenses")?.let { childElements(it, "license").isNotEmpty() } == true) break
+                val parent = childElement(pom, "parent") ?: break
+                val parts = listOf("groupId", "artifactId", "version").map { field ->
+                    childElement(parent, field)?.textContent?.trim() ?: error("Incomplete parent POM metadata")
+                }
+                require(parts[0].matches(Regex("[A-Za-z0-9_.-]+")) && parts[1].matches(Regex("[A-Za-z0-9_.-]+"))
+                    && parts[2].matches(Regex("[A-Za-z0-9_.+-]+"))) { "Unsupported parent POM coordinate" }
+                val coordinate = parts.joinToString(":")
+                require(parents.size < 16 && seen.add(coordinate)) { "Cyclic or excessive parent POM hierarchy" }
+                current = parentCache.getOrPut(coordinate) {
+                    project.dependencies.createArtifactResolutionQuery().forModule(parts[0], parts[1], parts[2])
+                        .withArtifacts(MavenModule::class.java, MavenPomArtifact::class.java).execute()
+                        .resolvedComponents.flatMap { it.getArtifacts(MavenPomArtifact::class.java) }
+                        .filterIsInstance<ResolvedArtifactResult>().singleOrNull()?.file
+                        ?: error("Unresolved license parent POM: $coordinate")
+                }
+                parents.add(mapOf("coordinate" to coordinate, "pom" to current.absolutePath))
+            }
+            return parents
+        }
         val catalog = artifacts.map { artifact ->
             val component = artifact.id.componentIdentifier as ModuleComponentIdentifier
-            mapOf("coordinate" to "${component.group}:${component.module}:${component.version}",
+            val coordinate = "${component.group}:${component.module}:${component.version}"
+            val pom = poms[component] ?: error("Unresolved runtime POM for ${component.displayName}")
+            mapOf("coordinate" to coordinate,
                 "archive" to artifact.file.absolutePath,
-                "pom" to (poms[component] ?: error("Unresolved runtime POM for ${component.displayName}")).absolutePath)
+                "pom" to pom.absolutePath, "parentPoms" to parentPoms(pom, coordinate))
         }
         val report = reportDirectory.get().asFile.apply { mkdirs() }
         val manifest = report.resolve("runtime-inputs.private.json")
@@ -62,6 +94,26 @@ abstract class GenerateNoticeAssets @Inject constructor(private val execOperatio
                 "--report", report.resolve("coverage.json").absolutePath)
         }.assertNormalExitValue()
     }
+
+    private fun readPom(file: java.io.File): Element {
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
+            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+        }
+        return factory.newDocumentBuilder().parse(file).documentElement
+    }
+
+    private fun childElement(parent: Element, name: String): Element? {
+        val matching = childElements(parent, name)
+        require(matching.size <= 1) { "Duplicate $name in POM metadata" }
+        return matching.singleOrNull()
+    }
+
+    private fun childElements(parent: Element, name: String): List<Element> =
+        (0 until parent.childNodes.length).mapNotNull { parent.childNodes.item(it) as? Element }
+            .filter { (it.localName ?: it.tagName) == name }
 }
 
 subprojects {
