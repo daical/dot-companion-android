@@ -81,7 +81,8 @@ fun WatchTheme(content: @Composable () -> Unit) {
 
 @Composable
 fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionMode) -> Unit,
-    onRetry: (String) -> Unit, onDeleteHistory: () -> Unit, animateCompanion: Boolean = true) = WatchTheme {
+    onRetry: (String) -> Unit, onDeleteHistory: () -> Unit, animateCompanion: Boolean = true,
+    showClock: Boolean = true) = WatchTheme {
     var writing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
@@ -102,7 +103,7 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
         val notices by rememberPackagedLicenses()
         WatchLicenseScreen(notices, onBack = { licenses = false })
     } else Scaffold(modifier = Modifier.fillMaxSize().then(screenShape).background(CompanionNight).testTag("watch_screen"),
-        timeText = { TimeText(modifier = Modifier.testTag("watch_time").scrollAway(listState, itemIndex = 0)) },
+        timeText = { if (showClock) TimeText(modifier = Modifier.testTag("watch_time").scrollAway(listState, itemIndex = 0)) },
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) }) {
         ScalingLazyColumn(state = listState, modifier = Modifier.fillMaxSize().testTag("watch_list"),
             contentPadding = PaddingValues(horizontal = 26.dp, vertical = 28.dp),

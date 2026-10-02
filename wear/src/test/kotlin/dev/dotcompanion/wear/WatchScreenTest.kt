@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollAction
@@ -60,16 +59,31 @@ class WatchScreenTest {
             assertTrue("$tag must be fully readable inside the round viewport", dx * dx + dy * dy <= radius * radius)
         }
     }
-    private fun screenshot(name: String) {
+    private fun nativeBitmap(): Bitmap = rule.runOnIdle {
+        val content = rule.activity.findViewById<View>(android.R.id.content)
+        assertTrue("Native content must be laid out", content.width > 0 && content.height > 0)
+        Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888).also {
+            content.draw(Canvas(it))
+        }
+    }
+    private fun clockBandDifferences(first: Bitmap, second: Bitmap): Int {
+        assertEquals(first.width, second.width)
+        assertEquals(first.height, second.height)
+        // The top-center band contains the clock glyphs, away from the animated
+        // edge indicator. Compare actual renders, without altering either bitmap.
+        val left = (first.width * .25f).toInt()
+        val width = (first.width * .75f).toInt() - left
+        val height = (first.height * .16f).toInt()
+        val before = IntArray(width * height)
+        val after = IntArray(width * height)
+        first.getPixels(before, 0, width, left, 0, width, height)
+        second.getPixels(after, 0, width, left, 0, width, height)
+        return before.indices.count { before[it] != after[it] }
+    }
+    private fun screenshot(name: String): Bitmap {
         // Preserve the configured round-screen layout while drawing the actual view.
         // Native View/Canvas rendering avoids Compose's unsupported redraw wait here.
-        val bitmap = rule.runOnIdle {
-            val content = rule.activity.findViewById<View>(android.R.id.content)
-            assertTrue("Native content must be laid out", content.width > 0 && content.height > 0)
-            Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888).also {
-                content.draw(Canvas(it))
-            }
-        }
+        val bitmap = nativeBitmap()
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val colors = HashSet<Int>()
@@ -82,6 +96,7 @@ class WatchScreenTest {
         val directory = requireNotNull(target.parentFile)
         assertTrue("Screenshot directory must exist", directory.isDirectory || directory.mkdirs())
         target.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        return bitmap
     }
     @Test fun roundSmallScreenRendersNativePreviewAndExplicitFixtureControl() {
         val sent = mutableListOf<String>()
@@ -98,11 +113,24 @@ class WatchScreenTest {
     @Test fun phoneReceiptAndMissingAckStateDoNotBecomeReplies() {
         val state = PersistentSnapshot(CompanionState(ConnectionMode.LOCAL_BRIDGE, listOf(message)), phoneAcknowledgedIds = setOf(message.requestId))
         val value = mutableStateOf(WatchUiState(state, phoneReachable = true))
-        rule.setContent { WatchScreen(value.value, {}, {}, {}, {}, false) }
+        val showClock = mutableStateOf(true)
+        rule.setContent { WatchScreen(value.value, {}, {}, {}, {}, false, showClock = showClock.value) }
+        val initialClock = nativeBitmap()
+        rule.runOnIdle { showClock.value = false }
+        val initialWithoutClock = nativeBitmap()
+        assertTrue("The initial native render must visibly contain the clock",
+            clockBandDifferences(initialClock, initialWithoutClock) > 20)
+        rule.runOnIdle { showClock.value = true }
         scrollTo(hasText("Saved on phone · no reply yet"))
         rule.onNodeWithText("Saved on phone · no reply yet").assertIsDisplayed()
-        rule.onNodeWithTag("watch_time").assertIsNotDisplayed()
-        screenshot("watch-round-receipt")
+        // scrollAway fades/translates a graphics layer. Its wrapper can retain
+        // visible semantics bounds even after the clock glyphs leave the screen.
+        val receiptWithClock = screenshot("watch-round-receipt")
+        rule.runOnIdle { showClock.value = false }
+        val receiptWithoutClock = nativeBitmap()
+        assertEquals("The scrolled clock must add no rendered pixels over the receipt screen",
+            0, clockBandDifferences(receiptWithClock, receiptWithoutClock))
+        rule.runOnIdle { showClock.value = true }
         rule.runOnIdle { value.value = value.value.copy(saved = value.value.saved.copy(phoneAcknowledgedIds = emptySet())) }
         scrollTo(hasText("Phone reports waiting · receipt unconfirmed"))
         rule.onNodeWithText("Phone reports waiting · receipt unconfirmed").assertIsDisplayed()
