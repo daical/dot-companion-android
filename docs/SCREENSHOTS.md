@@ -1,5 +1,11 @@
 # Native test renders
 
+The 0.2.0 phone sign-in screen below is an unedited local native View/Canvas render from the passing Robolectric suite on October 5, 2026. No account is authenticated and the official ChatGPT app is absent in this test fixture. The visible handoff is therefore disabled; its real-device behavior is still pending.
+
+<img src="screenshots/phone-sign-in.png" width="280" alt="Phone home screen with a visible Continue with ChatGPT action and manual dot call guidance">
+
+## Historical foundation renders
+
 These are actual native View/Canvas renders from [successful CI at `b92e035`](https://github.com/daical/dot-companion-android/actions/runs/36963111664), using Robolectric native graphics. They are unedited PNGs with synthetic fixtures, not physical-device or emulator captures. The companion is an original project design. Real-dot connectivity and voice remain unavailable.
 
 The phone viewport is 393 × 851 dp at mdpi. Animation is disabled only in the screenshot fixtures.

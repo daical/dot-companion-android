@@ -1,5 +1,15 @@
 # Verification record
 
+## Local 0.2.0 preview checks, October 5, 2026
+
+The current local implementation passed both APK builds, all 138 JVM/Android tests (core 10, identity 49, shared 24, phone 34, watch 21), and lint with 0 errors and 25 warnings. The phone and watch package/signing certificate matched within the build. APK notice assets matched their generated coverage: phone 92 entries/77 runtime artifacts, watch 94 entries/79. The 11 notice-generator Python tests and the source-pattern check also passed.
+
+The phone sign-in screen was rendered with native Robolectric graphics and visually inspected. Provider responses, account storage adapters and account labels in tests are synthetic. Real Android Keystore operation, browser authentication, official ChatGPT app handoff, physical phone/watch delivery and the orientation check after restart remain unverified. No live model call or dot subscription is established by these checks.
+
+The optional `-PcompanionSideBySide=true` debug pair uses `dev.dotcompanion.app.dev` and **Dot Companion Dev** to preserve a differently signed earlier preview and its private history. Standard builds retain `dev.dotcompanion.app`. The selected pair must match on both devices, and its actual installed certificate must be checked before replacement. Separate app storage is not a migration of the original queue.
+
+## Historical 0.1.0 foundation evidence
+
 The implementation at [`b92e0354582da643c5e888db02c0bd0b537ee62f`](https://github.com/daical/dot-companion-android/commit/b92e0354582da643c5e888db02c0bd0b537ee62f) passed [the complete hosted workflow](https://github.com/daical/dot-companion-android/actions/runs/36963111664) on October 2, 2026. This evidence snapshot and the [screenshots](SCREENSHOTS.md) come from that run. Release notes identify the additional successful workflow for the exact tagged commit and its paired APKs.
 
 The foundation is an unofficial community preview. Build success, synthetic bridge success, device transport and a real dot connection are separate claims.

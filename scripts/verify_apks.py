@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """Verify only this build's developer APKs with already installed SDK tools."""
 import hashlib
+import argparse
 import json
 from pathlib import Path
 import re
 import subprocess
-import sys
 from zipfile import ZipFile
 
 from generate_notices import strict_json
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("build_tools", type=Path)
+parser.add_argument("--side-by-side", action="store_true", help="Verify the separate .dev phone/watch pair")
+args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
-tools = Path(sys.argv[1])
+tools = args.build_tools
+expected_package = "dev.dotcompanion.app.dev" if args.side_by_side else "dev.dotcompanion.app"
 reports = root / "build/reports/apks"
 reports.mkdir(parents=True, exist_ok=True)
 results = {}
@@ -29,7 +34,7 @@ for module in ("mobile", "wear"):
     (reports / f"{module}-package.txt").write_text(badging, encoding="utf-8")
     digests = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$", signing, re.MULTILINE)
     package = re.search(r"^package: name='([^']+)'", badging, re.MULTILINE)
-    if len(digests) != 1 or package is None or package.group(1) != "dev.dotcompanion.app":
+    if len(digests) != 1 or package is None or package.group(1) != expected_package:
         raise SystemExit(f"Unexpected signing or package identity in {module} developer APK")
     with ZipFile(apk) as archive:
         notice_bytes = archive.read("assets/licenses/notices.json")

@@ -49,6 +49,7 @@ data class PhoneUiState(val saved: PersistentSnapshot, val issue: String? = null
 
 class CompanionApplication : Application() {
     val repository: PhoneRepository by lazy { PhoneRepository(this) }
+    val chatGptAccounts: ChatGptAccountRepository by lazy { ChatGptAccountRepository(this) }
 }
 
 interface PhoneWatchTransport {

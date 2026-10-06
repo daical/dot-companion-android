@@ -4,13 +4,17 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.google.android.gms.wearable.MessageEvent
+import dev.dotcompanion.core.CompanionMessage
 import dev.dotcompanion.core.CompanionQueue
+import dev.dotcompanion.core.CompanionState
 import dev.dotcompanion.core.ConnectionMode
+import dev.dotcompanion.core.MessageSource
 import dev.dotcompanion.core.MessageStatus
 import dev.dotcompanion.core.ReplyProvenance
 import dev.dotcompanion.core.FailureKind
 import dev.dotcompanion.shared.WatchWire
 import dev.dotcompanion.shared.DurableStateStore
+import dev.dotcompanion.shared.PersistentSnapshot
 import dev.dotcompanion.shared.StateFileOperations
 import dev.dotcompanion.shared.CheckedStateFileOperations
 import java.io.File
@@ -32,8 +36,8 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class WatchRepositoryTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
+    private val file get() = File(context.filesDir, "companion-state-v1.json")
     @Before fun clearFixtureState() {
-        val file = File(context.filesDir, "companion-state-v1.json")
         file.delete(); File(file.path + ".bak").delete(); File(file.path + ".new").delete()
     }
     private class FakePhone : WatchPhoneTransport {
@@ -41,14 +45,91 @@ class WatchRepositoryTest {
         var sending: CompletableDeferred<Unit>? = null
         var sends = 0
         var lookups = 0
-        override suspend fun peers(): List<PhonePeer> { lookups++; discovery?.await(); return listOf(PhonePeer("fixture-phone", true)) }
-        override suspend fun send(nodeId: String, path: String, bytes: ByteArray) { sends++; sending?.await() }
+        var reachablePeers = listOf(PhonePeer("fixture-phone", true))
+        val packets = mutableListOf<Triple<String, String, ByteArray>>()
+        override suspend fun peers(): List<PhonePeer> { lookups++; discovery?.await(); return reachablePeers }
+        override suspend fun send(nodeId: String, path: String, bytes: ByteArray) {
+            sends++; sending?.await(); packets += Triple(nodeId, path, bytes)
+        }
     }
     private fun event(path: String, bytes: ByteArray, source: String = "fixture-phone") = object : MessageEvent {
         override fun getRequestId() = 1
         override fun getPath() = path
         override fun getData() = bytes
         override fun getSourceNodeId() = source
+    }
+    @Test fun freshRepositoryRetainsPhoneLinkAndRetriesThePinnedRequestAfterItsDeadline() = runTest {
+        val interrupted = CompanionMessage("9f13e909-fb28-479a-9b99-de401517eaa1", CompanionQueue.CONVERSATION_ID,
+            "Persisted watch request", "2026-01-01T00:00:00Z", status = MessageStatus.SENDING,
+            attempts = 2, nextAttemptAtMillis = 5500, source = MessageSource.WATCH)
+        DurableStateStore(file).update { PersistentSnapshot(
+            state = CompanionState(ConnectionMode.LOCAL_BRIDGE, listOf(interrupted)),
+            peerNodeIds = mapOf(interrupted.requestId to "fixture-phone")) }
+        val phone = FakePhone().apply {
+            reachablePeers = listOf(PhonePeer("another-phone", true), PhonePeer("fixture-phone", false))
+        }
+        val reopened = WatchRepository(context, backgroundScope, phone) { 1000 + testScheduler.currentTime }
+        assertEquals(ConnectionMode.LOCAL_BRIDGE, reopened.saved.state.mode)
+        assertEquals(interrupted.copy(status = MessageStatus.QUEUED), reopened.saved.state.messages.single())
+        assertFalse(reopened.ui.value.phoneReachable)
+        assertTrue(reopened.saved.phoneAcknowledgedIds.isEmpty())
+
+        reopened.startActive(); runCurrent(); advanceTimeBy(4000); runCurrent()
+        assertEquals(0, phone.sends)
+        assertEquals(2, reopened.saved.state.messages.single().attempts)
+        assertEquals(5500L, reopened.saved.state.messages.single().nextAttemptAtMillis)
+        advanceTimeBy(2000); runCurrent()
+        val packet = phone.packets.single()
+        assertEquals("fixture-phone", packet.first)
+        assertEquals(WatchWire.REQUEST_PATH, packet.second)
+        assertEquals(interrupted.requestId, WatchWire.decodeRequest(packet.third).requestId)
+        assertEquals(interrupted.requestId, reopened.saved.state.messages.single().requestId)
+        assertEquals(MessageStatus.SENDING, reopened.saved.state.messages.single().status)
+        assertEquals(3, reopened.saved.state.messages.single().attempts)
+        assertEquals("fixture-phone", reopened.saved.peerNodeIds[interrupted.requestId])
+        assertTrue(reopened.saved.phoneAcknowledgedIds.isEmpty())
+    }
+    @Test fun freshRepositoryRetainsPhoneAcknowledgementAndPhoneFailureRetryOwnership() = runTest {
+        val awaiting = CompanionMessage("9f13e909-fb28-479a-9b99-de401517eaa1", CompanionQueue.CONVERSATION_ID,
+            "Acknowledged watch request", "2026-01-01T00:00:00Z", status = MessageStatus.AWAITING_REPLY,
+            attempts = 2, source = MessageSource.WATCH)
+        val phoneFailed = awaiting.copy(requestId = "2a384828-547d-4c7f-ac26-46aa41998811", text = "Phone-owned failure",
+            status = MessageStatus.FAILED, failureKind = FailureKind.TRANSPORT)
+        val snapshot = PersistentSnapshot(CompanionState(ConnectionMode.LOCAL_BRIDGE, listOf(awaiting, phoneFailed)),
+            phoneAcknowledgedIds = setOf(awaiting.requestId),
+            peerNodeIds = mapOf(awaiting.requestId to "fixture-phone", phoneFailed.requestId to "fixture-phone"),
+            phoneReportedFailureIds = setOf(phoneFailed.requestId))
+        DurableStateStore(file).update { snapshot }
+        val phone = FakePhone()
+        val reopened = WatchRepository(context, backgroundScope, phone) { 1000 + testScheduler.currentTime }
+        assertEquals(snapshot, reopened.saved)
+        reopened.retry(phoneFailed.requestId); runCurrent()
+        assertEquals(phoneFailed, reopened.saved.state.messages.last())
+
+        reopened.startActive(); runCurrent()
+        assertEquals(awaiting.requestId, WatchWire.decodeRequest(phone.packets.single().third).requestId)
+        assertEquals(awaiting, reopened.saved.state.messages.first())
+        assertEquals(snapshot.phoneAcknowledgedIds, reopened.saved.phoneAcknowledgedIds)
+        assertEquals(snapshot.phoneReportedFailureIds, reopened.saved.phoneReportedFailureIds)
+        assertEquals(snapshot.peerNodeIds, reopened.saved.peerNodeIds)
+        assertNull(reopened.saved.state.messages.first().reply)
+    }
+    @Test fun freshRepositoryPreservesAnExplicitDisconnectWithoutSendingPendingText() = runTest {
+        val original = WatchRepository(context, backgroundScope, FakePhone()) { 1000 + testScheduler.currentTime }
+        original.selectMode(ConnectionMode.LOCAL_BRIDGE); runCurrent()
+        original.send("Explicitly paused watch request"); runCurrent()
+        original.selectMode(ConnectionMode.DISCONNECTED); runCurrent()
+        val pending = original.saved.state.messages.single()
+        val phone = FakePhone()
+        val reopened = WatchRepository(context, backgroundScope, phone) { 1000 + testScheduler.currentTime }
+        assertEquals(ConnectionMode.DISCONNECTED, reopened.saved.state.mode)
+        assertEquals(pending, reopened.saved.state.messages.single())
+
+        reopened.startActive(); runCurrent(); advanceTimeBy(4500); runCurrent()
+        assertEquals(0, phone.sends)
+        assertEquals(0, phone.lookups)
+        assertEquals(pending, reopened.saved.state.messages.single())
+        assertTrue(reopened.saved.phoneAcknowledgedIds.isEmpty())
     }
     @Test fun transportCompletionNeverBecomesAPhoneReceiptOrReply() = runTest {
         val phone = FakePhone()

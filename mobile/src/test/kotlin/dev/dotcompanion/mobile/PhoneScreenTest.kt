@@ -8,6 +8,7 @@ import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -23,6 +24,7 @@ import dev.dotcompanion.core.FailureKind
 import dev.dotcompanion.core.MessageStatus
 import dev.dotcompanion.core.ReplyProvenance
 import dev.dotcompanion.shared.PersistentSnapshot
+import dev.dotcompanion.identity.AccountIdentity
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -67,6 +69,7 @@ class PhoneScreenTest {
         val sends = mutableListOf<String>()
         rule.setContent { PhoneScreen(PhoneUiState(PersistentSnapshot()), { sends += it }, {}, { _, _ -> }, {}, {}, false, animateCompanion = false) }
         rule.onNodeWithText("Live dot connection: unavailable").assertIsDisplayed()
+        rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Try a synthetic fixture"))
         rule.onNodeWithTag("synthetic_fixture").performClick()
         assertEquals(listOf("Show me this local preview."), sends)
         rule.onNodeWithTag("voice_unavailable").assertIsDisplayed()
@@ -97,5 +100,55 @@ class PhoneScreenTest {
         rule.onNodeWithText("Waiting for reply").assertIsDisplayed()
         rule.onNodeWithText("Live dot connection: unavailable").assertIsDisplayed()
         screenshot("phone-waiting")
+    }
+    @Test fun signInIsVisibleAndDoesNotChangeMessageConnectionMode() {
+        var signIns = 0
+        var modeChanges = 0
+        rule.setContent { PhoneScreen(PhoneUiState(PersistentSnapshot()), {}, { modeChanges++ }, { _, _ -> }, {}, {}, false, false,
+            onSignIn = { signIns++ }) }
+        screenshot("phone-sign-in")
+        rule.onNodeWithTag("continue_with_chatgpt").assertIsDisplayed().performClick()
+        assertEquals(1, signIns)
+        assertEquals(0, modeChanges)
+        rule.onNodeWithText("Live dot connection: unavailable").assertIsDisplayed()
+    }
+    @Test fun identityAndCallHandoffRemainSeparateFromLiveDotConnectivity() {
+        var handoffs = 0
+        var modeChanges = 0
+        val account = ChatGptAccountUi(activeAccount = AccountIdentity("https://auth.openai.com", "test-subject", "oaiapp_fixture",
+            "fixture@example.com", "Fixture account", 2000000000L), signedIn = true)
+        rule.setContent { PhoneScreen(PhoneUiState(PersistentSnapshot()), {}, { modeChanges++ }, { _, _ -> }, {}, {}, false, false,
+            account = account, chatGptInstalled = true, onOpenChatGpt = { handoffs++ }) }
+        rule.onNodeWithTag("chatgpt_identity_status").assertTextContains("dot connection still required", substring = true)
+        rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Open ChatGPT"))
+        rule.onNodeWithTag("open_chatgpt_app").performClick()
+        assertEquals(1, handoffs)
+        assertEquals(0, modeChanges)
+        rule.onNodeWithText("Call connected").assertDoesNotExist()
+    }
+    @Test fun missingOfficialAppAndBusySignInHaveHonestRecoveryControls() {
+        rule.setContent { PhoneScreen(PhoneUiState(PersistentSnapshot()), {}, {}, { _, _ -> }, {}, {}, false, false,
+            account = ChatGptAccountUi(phase = ChatGptSignInPhase.WAITING_FOR_BROWSER)) }
+        rule.onNodeWithTag("cancel_chatgpt_sign_in").assertIsDisplayed()
+        rule.onNodeWithTag("continue_with_chatgpt").assertDoesNotExist()
+        rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Open ChatGPT"))
+        rule.onNodeWithTag("open_chatgpt_app").assertIsNotEnabled()
+    }
+    @Test fun expiredCredentialsStillOfferSignOutAndSameEmailProfilesAreDistinct() {
+        var signedOut = 0
+        var selected: String? = null
+        val first = AccountIdentity("https://auth.openai.com", "test-subject", "oaiapp_first_profile",
+            "fixture@example.com", null, 100L)
+        val second = first.copy(clientId = "oaiapp_second_profile")
+        val account = ChatGptAccountUi(activeAccount = first, savedAccounts = listOf(first, second), credentialsPresent = true)
+        rule.setContent { PhoneScreen(PhoneUiState(PersistentSnapshot()), {}, {}, { _, _ -> }, {}, {}, false, false,
+            account = account, onSignOut = { signedOut++ }, onSelectAccount = { selected = it }) }
+        rule.onNodeWithTag("phone_messages").performScrollToNode(hasText("Sign out"))
+        rule.onNodeWithTag("sign_out_chatgpt").performClick()
+        assertEquals(1, signedOut)
+        assertTrue(chatGptAccountLabel(first) != chatGptAccountLabel(second))
+        rule.onNodeWithTag("phone_messages").performScrollToNode(hasText(chatGptAccountLabel(second)))
+        rule.onNodeWithText(chatGptAccountLabel(second)).performClick()
+        assertEquals(second.clientId, selected)
     }
 }

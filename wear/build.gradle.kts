@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val companionSideBySide = providers.gradleProperty("companionSideBySide").map {
+    require(it == "true" || it == "false") { "companionSideBySide must be true or false" }
+    it.toBoolean()
+}.getOrElse(false)
+
 android {
     namespace = "dev.dotcompanion.wear"
     compileSdk = 35
@@ -11,9 +16,19 @@ android {
         applicationId = "dev.dotcompanion.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0-preview"
+        resValue("string", "app_name", "Dot Companion")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        getByName("debug") {
+            if (companionSideBySide) {
+                applicationIdSuffix = ".dev"
+                versionNameSuffix = "-dev"
+                resValue("string", "app_name", "Dot Companion Dev")
+            }
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

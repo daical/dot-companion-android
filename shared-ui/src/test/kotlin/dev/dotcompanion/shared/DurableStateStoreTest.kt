@@ -4,6 +4,8 @@ import dev.dotcompanion.core.CompanionMessage
 import dev.dotcompanion.core.CompanionQueue
 import dev.dotcompanion.core.CompanionState
 import dev.dotcompanion.core.ConnectionMode
+import dev.dotcompanion.core.FailureKind
+import dev.dotcompanion.core.MessageSource
 import dev.dotcompanion.core.MessageStatus
 import dev.dotcompanion.core.ReplyProvenance
 import java.io.ByteArrayInputStream
@@ -43,6 +45,38 @@ class DurableStateStoreTest {
         val restored = DurableStateStore(file).snapshots.value
         assertEquals(message.requestId, restored.state.messages.single().requestId)
         assertEquals(MessageStatus.QUEUED, restored.state.messages.single().status)
+    }
+    @Test fun watchPhoneLinkPolicyRetainsQueueRecoveryAndDeliveryOwnership() {
+        val file = File(temporary.root, "watch-queue.json")
+        val interrupted = message.copy(source = MessageSource.WATCH, status = MessageStatus.SENDING,
+            attempts = 2, nextAttemptAtMillis = 5500)
+        val awaiting = message.copy(requestId = "2a384828-547d-4c7f-ac26-46aa41998811", source = MessageSource.WATCH,
+            status = MessageStatus.AWAITING_REPLY, attempts = 1)
+        val phoneFailed = message.copy(requestId = "9622894e-2c65-4b7c-bb97-709fdb66d517", source = MessageSource.WATCH,
+            status = MessageStatus.FAILED, attempts = 3, failureKind = FailureKind.TRANSPORT)
+        val synthetic = message.copy(requestId = "56371eba-d117-4114-9833-5e35bdc4057f", source = MessageSource.WATCH,
+            status = MessageStatus.REPLIED, reply = "[Synthetic fixture] Retained preview", replyProvenance = ReplyProvenance.LOCAL_SYNTHETIC)
+        val snapshot = PersistentSnapshot(CompanionState(ConnectionMode.LOCAL_BRIDGE, listOf(interrupted, awaiting, phoneFailed, synthetic)),
+            syntheticRequestIds = setOf(synthetic.requestId), phoneAcknowledgedIds = setOf(awaiting.requestId),
+            peerNodeIds = listOf(interrupted, awaiting, phoneFailed).associate { it.requestId to "fixture-phone" },
+            phoneReportedFailureIds = setOf(phoneFailed.requestId))
+        DurableStateStore(file).update { snapshot }
+
+        val reopened = DurableStateStore(file, disconnectLocalBridgeOnRestart = false)
+        assertEquals(snapshot.copy(state = snapshot.state.copy(messages = listOf(
+            interrupted.copy(status = MessageStatus.QUEUED), awaiting, phoneFailed, synthetic))), reopened.snapshots.value)
+        assertTrue(reopened.writable)
+        assertNull(reopened.loadError)
+        assertFalse(reopened.snapshots.value.state.liveDotConnected)
+    }
+    @Test fun watchPhoneLinkPolicyStillFailsClosedOnCorruptHistory() {
+        val file = File(temporary.root, "watch-queue.json").apply { writeText("broken") }
+        val reopened = DurableStateStore(file, disconnectLocalBridgeOnRestart = false)
+        assertEquals(ConnectionMode.DISCONNECTED, reopened.snapshots.value.state.mode)
+        assertFalse(reopened.writable)
+        assertNotNull(reopened.loadError)
+        assertThrows(IllegalStateException::class.java) { reopened.update { it } }
+        assertEquals("broken", file.readText())
     }
     @Test fun corruptedHistoryIsPreservedUntilExplicitDeletion() {
         val file = File(temporary.root, "queue.json").apply { writeText("broken") }

@@ -1,5 +1,8 @@
 package dev.dotcompanion.mobile
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -67,16 +70,33 @@ import dev.dotcompanion.shared.rememberPackagedLicenses
 
 class MainActivity : ComponentActivity() {
     private val repository get() = (application as CompanionApplication).repository
+    private val accounts get() = (application as CompanionApplication).chatGptAccounts
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             val ui by repository.ui.collectAsStateWithLifecycle()
+            val account by accounts.ui.collectAsStateWithLifecycle()
+            var handoffIssue by remember { mutableStateOf<String?>(null) }
+            val chatGptInstalled = packageManager.getLaunchIntentForPackage(CHATGPT_PACKAGE) != null
+            val openBrowser: (java.net.URI) -> Unit = { uri -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri.toString()))) }
             PhoneScreen(ui, repository::send, repository::selectMode, repository::connect,
-                repository::retry, repository::deleteHistory, showDebugControls = BuildConfig.DEBUG)
+                repository::retry, repository::deleteHistory, showDebugControls = BuildConfig.DEBUG,
+                account = account, onSignIn = { accounts.signIn(openBrowser) }, onCancelSignIn = accounts::cancelSignIn,
+                onSignOut = accounts::signOut, onNewAccount = { accounts.signIn(openBrowser, newAccount = true) },
+                onSelectAccount = accounts::selectAccount, chatGptInstalled = chatGptInstalled,
+                onOpenChatGpt = {
+                    val intent = packageManager.getLaunchIntentForPackage(CHATGPT_PACKAGE)
+                    try {
+                        if (intent == null) handoffIssue = "The ChatGPT phone app is not available."
+                        else { startActivity(intent); handoffIssue = null }
+                    } catch (_: ActivityNotFoundException) { handoffIssue = "ChatGPT could not be opened. Try opening it from your phone’s app list." }
+                    catch (_: SecurityException) { handoffIssue = "ChatGPT could not be opened. Try opening it from your phone’s app list." }
+                }, handoffIssue = handoffIssue)
         }
     }
-    override fun onStart() { super.onStart(); repository.startActive() }
+    override fun onStart() { super.onStart(); repository.startActive(); accounts.refreshVisibleState() }
     override fun onStop() { repository.stopActive(); super.onStop() }
+    companion object { private const val CHATGPT_PACKAGE = "com.openai.chatgpt" }
 }
 
 @Composable
@@ -98,6 +118,15 @@ fun PhoneScreen(
     onDeleteHistory: () -> Unit,
     showDebugControls: Boolean,
     animateCompanion: Boolean = true,
+    account: ChatGptAccountUi = ChatGptAccountUi(),
+    onSignIn: () -> Unit = {},
+    onCancelSignIn: () -> Unit = {},
+    onSignOut: () -> Unit = {},
+    onNewAccount: () -> Unit = {},
+    onSelectAccount: (String) -> Unit = {},
+    chatGptInstalled: Boolean = false,
+    onOpenChatGpt: () -> Unit = {},
+    handoffIssue: String? = null,
 ) = PhoneTheme {
     val state = ui.saved.state
     var settings by remember { mutableStateOf(false) }
@@ -134,6 +163,10 @@ fun PhoneScreen(
             }
             ui.issue?.let { Text(it, Modifier.padding(top = 10.dp).testTag("phone_error"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth().testTag("phone_messages"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                item(key = "chatgpt_account") {
+                    ChatGptAccountCard(account, onSignIn, onCancelSignIn, onSignOut, onNewAccount, onSelectAccount,
+                        chatGptInstalled, onOpenChatGpt, handoffIssue)
+                }
                 item(key = "intro") {
                     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         CompanionVisual(Modifier.size(if (state.messages.isEmpty()) 156.dp else 84.dp), state.messages.lastOrNull()?.status, animateCompanion)

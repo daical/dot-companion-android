@@ -10,6 +10,7 @@ Project source is Apache-2.0. Dependencies retain their own terms; this is not a
 | Android Gradle Plugin 8.9.2 | Android build tooling | [Apache-2.0](https://android.googlesource.com/platform/tools/base/+/refs/heads/mirror-goog-studio-main/LICENSE) |
 | AndroidX Compose, Activity, Core, Wear Compose, and Lifecycle | Native UI and Android utilities | [Apache-2.0](https://android.googlesource.com/platform/frameworks/support/+/androidx-main/LICENSE.txt); individual artifacts may include additional notices |
 | Google Play Services Wearable | Phone/watch Data Layer | [Google Android SDK terms](https://developer.android.com/studio/terms) and [third-party notices](https://developers.google.com/android/guides/opensource); not Apache-2.0 project code |
+| Nimbus JOSE + JWT 10.10 | Signed ChatGPT identity-token validation | [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.txt), declared in the resolved 10.10 POM; [upstream source](https://bitbucket.org/connect2id/nimbus-jose-jwt/src/10.10/) |
 | JUnit 4.13.2 | JVM tests | [Eclipse Public License 1.0](https://github.com/junit-team/junit4/blob/r4.13.2/LICENSE-junit.txt) |
 | Robolectric 4.14.1 | Local Android/Compose tests; not packaged in the apps | [MIT, with Apache-2.0 portions](https://github.com/robolectric/robolectric/blob/robolectric-4.14.1/LICENSE) |
 | Node.js built-in modules | Local bridge runtime; not vendored | [Node.js license](https://github.com/nodejs/node/blob/main/LICENSE), with retained upstream third-party terms |
