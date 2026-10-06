@@ -88,7 +88,7 @@ class WatchRepository(
     context: Context,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val transport: WatchPhoneTransport = GoogleWatchPhoneTransport(context),
-    private val storeFactory: (File) -> DurableStateStore = { DurableStateStore(it) },
+    private val storeFactory: (File) -> DurableStateStore = { DurableStateStore(it, disconnectLocalBridgeOnRestart = false) },
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val store = storeFactory(File(context.filesDir, "companion-state-v1.json"))

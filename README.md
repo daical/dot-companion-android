@@ -4,6 +4,8 @@ An **unofficial community project** for an Android phone and watch companion. It
 
 This foundation includes a native local preview and a synthetic MCP Events text bridge. **It has not connected to a real dot.** It does not read existing ChatGPT conversations, provide native dot voice calls, or substitute an API assistant. No model calls are made.
 
+The 0.2.0 preview adds a phone **Continue with ChatGPT** identity flow, protected account storage, and an **Open ChatGPT** handoff for calling through the official phone app. Both APKs, 138 JVM/Android tests and lint passed locally. Real sign-in and phone handoff still require device validation. Account identity does not change the message queue to a live dot connection. See [sign-in behavior and acceptance checks](docs/SIGN_IN.md).
+
 ## What this milestone delivers
 
 | Capability | Status |
@@ -13,6 +15,8 @@ This foundation includes a native local preview and a synthetic MCP Events text 
 | Durable local queue, retries, and delivery states | Implemented with shared state tests |
 | Phone/watch Data Layer transport | Implemented; actual paired devices not tested |
 | Local authenticated request → event → read tool → reply tool | Synthetic harness, tested locally and in CI |
+| ChatGPT account identity | Built and regression-tested; live phone sign-in unverified |
+| Call dot through the official phone app | Explicit app handoff built and tested; actual handoff unverified, direct watch calling unavailable |
 | Offline dependency notices | Bundled from the resolved runtime graph; native readers tested |
 | Real dot messaging via an installed plugin | Not configured or validated |
 | Microphone, speech streaming, and notifications | Not enabled; no permission prompts |
@@ -39,12 +43,14 @@ The demo uses a synthetic subscriber and reply tool. It does not contact ChatGPT
 Use an Android environment whose SDK terms you have already accepted: JDK 17, Python 3.9 or later, Android SDK platform 35 and Build Tools 35.0.0. Python generates offline notices from the resolved runtime graph. The Gradle 8.11.1 wrapper JAR is checksum verified and its distribution checksum is pinned. Build scripts do not accept SDK licenses or automatically install SDK packages.
 
 ```sh
-./gradlew :core:test :mobile:assembleDebug :wear:assembleDebug \
+./gradlew :core:test :identity:test :mobile:assembleDebug :wear:assembleDebug \
   :shared-ui:testDebugUnitTest :mobile:testDebugUnitTest :wear:testDebugUnitTest \
   :shared-ui:lintDebug :mobile:lintDebug :wear:lintDebug
 ```
 
 Both apps use `dev.dotcompanion.app` and must share a signing key to communicate through the Wearable Data Layer. Development APKs from the same CI build share that build's debug key; do not mix artifacts from different builds. Debug APKs are for developer testing, not a production release. Physical-device installation and microphone/notification grants remain a separate user action.
+
+When an existing preview uses a different signer, preserve its data by building both debug apps with `-PcompanionSideBySide=true`. This pair uses `dev.dotcompanion.app.dev` and the launcher label **Dot Companion Dev**. Verify it with `python3 scripts/verify_apks.py "$ANDROID_HOME/build-tools/35.0.0" --side-by-side`. Both devices need the same package ID and signing certificate. The separate install has its own storage; it does not copy or delete the original preview's history.
 
 For the Android emulator, the local bridge host is `http://10.0.2.2:8787`. Only the debug manifest permits this exact cleartext host. Normal endpoints require HTTPS. Tokens stay on the phone and never cross the watch transport. No production token or client ID is included.
 

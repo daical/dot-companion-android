@@ -5,7 +5,7 @@ import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-skip_dirs = {".git", ".gradle", "build", "node_modules", ".data", ".runtime", ".idea"}
+skip_dirs = {".git", ".gradle", "build", "node_modules", ".data", ".runtime", ".idea", ".local-dev-tools"}
 patterns = {
     "private-key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "github-token": re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,})\b"),

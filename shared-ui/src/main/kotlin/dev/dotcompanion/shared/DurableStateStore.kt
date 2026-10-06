@@ -66,7 +66,11 @@ object CheckedStateFileOperations : StateFileOperations {
 }
 
 /** Publish only after file sync, atomic rename, byte verification, and parent-directory sync. */
-class DurableStateStore(private val file: File, private val operations: StateFileOperations = CheckedStateFileOperations) {
+class DurableStateStore(
+    private val file: File,
+    private val operations: StateFileOperations = CheckedStateFileOperations,
+    private val disconnectLocalBridgeOnRestart: Boolean = true,
+) {
     private val temporary = File(file.path + ".new")
     private val backup = File(file.path + ".bak")
     private val parent = requireNotNull(file.absoluteFile.parentFile)
@@ -144,8 +148,9 @@ class DurableStateStore(private val file: File, private val operations: StateFil
                 operations.syncDirectory(parent)
             }
             stored.copy(state = CompanionQueue.recoverAfterRestart(stored.state, stored.syntheticRequestIds).let {
-                // Development tokens are memory-only; a restart cannot reconnect a bridge.
-                if (it.mode == ConnectionMode.LOCAL_BRIDGE) it.copy(mode = ConnectionMode.DISCONNECTED) else it
+                // Phone bridge tokens are memory-only. The watch's credential-free phone link can retain its mode.
+                if (disconnectLocalBridgeOnRestart && it.mode == ConnectionMode.LOCAL_BRIDGE)
+                    it.copy(mode = ConnectionMode.DISCONNECTED) else it
             })
         }
     } catch (_: Exception) {

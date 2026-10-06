@@ -191,6 +191,8 @@ fun WatchScreen(ui: WatchUiState, onSend: (String) -> Unit, onMode: (ConnectionM
                     }
                 }
                 item { Text("Voice / push to talk unavailable", style = MaterialTheme.typography.caption2, textAlign = TextAlign.Center, modifier = Modifier.testTag("watch_voice_unavailable")) }
+                item { Text("Account sign-in: open Dot Companion on your phone.", style = MaterialTheme.typography.caption2, textAlign = TextAlign.Center) }
+                item { Text("Call dot: open ChatGPT on your phone, choose your dot, and tap its phone button if available.", style = MaterialTheme.typography.caption2, textAlign = TextAlign.Center) }
                 if (ui.saved.state.mode != ConnectionMode.LOCAL_PREVIEW) {
                     item { Chip(onClick = { onMode(ConnectionMode.LOCAL_PREVIEW) }, label = { Text("Local preview") }, secondaryLabel = { Text("Synthetic only") }, modifier = Modifier.fillMaxWidth()) }
                 }

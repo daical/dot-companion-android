@@ -61,6 +61,34 @@ class PhoneRepositoryTest {
         override fun getSourceNodeId() = node
     }
 
+    @Test fun freshRepositoryRequiresReconnectWithoutRestoringDevelopmentCredentials() = runTest {
+        val endpoint = "https://example.invalid"
+        val token = "fixture-memory-only-development-token"
+        val bridge = FakeBridge()
+        val original = PhoneRepository(context, backgroundScope, { _, _ -> bridge }, watchTransport = FakeWatch(), onlineCheck = { true })
+        original.selectMode(ConnectionMode.DISCONNECTED); runCurrent()
+        original.send("Retained bridge request"); runCurrent()
+        original.connect(endpoint, token); runCurrent(); original.startActive(); runCurrent()
+        val pending = original.saved.state.messages.single()
+        assertEquals(ConnectionMode.LOCAL_BRIDGE, original.saved.state.mode)
+        assertEquals(MessageStatus.AWAITING_REPLY, pending.status)
+        assertEquals(1, bridge.submissions)
+        original.stopActive(); runCurrent()
+
+        var transportCreations = 0
+        val nextBridge = FakeBridge()
+        val reopened = PhoneRepository(context, backgroundScope, { _, _ -> transportCreations++; nextBridge },
+            watchTransport = FakeWatch(), onlineCheck = { true })
+        assertEquals(ConnectionMode.DISCONNECTED, reopened.saved.state.mode)
+        assertEquals(pending, reopened.saved.state.messages.single())
+        assertFalse(file.readText().contains(token))
+        assertFalse(file.readText().contains(endpoint))
+        reopened.startActive(); runCurrent(); advanceTimeBy(3100); runCurrent()
+        assertEquals(ConnectionMode.DISCONNECTED, reopened.saved.state.mode)
+        assertEquals(pending, reopened.saved.state.messages.single())
+        assertEquals(0, transportCreations)
+        assertEquals(0, nextBridge.submissions)
+    }
     @Test fun delayedVerificationCannotReconnectAfterDisconnect() = runTest {
         val bridge = FakeBridge().apply { verification = CompletableDeferred() }
         val repo = PhoneRepository(context, backgroundScope, { _, _ -> bridge }, onlineCheck = { true })

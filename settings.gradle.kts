@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "dot-companion-android"
-include(":core", ":shared-ui", ":mobile", ":wear")
+include(":core", ":identity", ":shared-ui", ":mobile", ":wear")
